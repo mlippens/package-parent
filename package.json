@@ -10,7 +10,8 @@
   "dependencies": {
     "json5": "^2.2.0",
     "lodash": "^4.17.21",
-    "minimist": "^1.2.5"
+    "minimist": "^1.2.5",
+    "ow": "^0.28.1"
   },
   "devDependencies": {
     "@types/jest": "^27.0.3",

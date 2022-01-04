@@ -1,81 +1,75 @@
 import * as fs from "fs";
 import * as path from "path";
-import * as json5 from "json5";
 import parseArgs from 'minimist';
+import ow from 'ow';
 import { merge } from "lodash";
-import { getProjects } from './rush'
+import * as rush from './rush';
+import * as util from './util'
 
 
 type Project = {
   projectFolder: string
 }
 
-const config = {
-  packages: {
-    folder: '@app/',
-    parent: {
-      private: true,
-      author: "Michael Lippens",
-      scripts: {
-        test: "jest -i",
-        build: "tsc",
-      },
-    },
-  },
-};
-
 const getFolders = (p: string) => {
   return fs
-  .readdirSync(p, { withFileTypes: true })
-  .filter(f => f.isDirectory())
-  .map(f => f.name);
+    .readdirSync(p, { withFileTypes: true })
+    .filter(f => f.isDirectory())
+    .map(f => f.name);
 }
 
-const findProjects = async (p: string) => {
+const exclusions = ['node_modules'];
 
-  let currentFolders = getFolders(p);
-  let current = 0;
-  let projects = [];
-  do {
-    
-    const foundPackages = currentFolders
-      .map((f) => {
-        return { projectFolder: f, exists: fs.existsSync(path.join(f, 'package.json')) }
-      })
-      .filter((e) => e.exists)
-      .forEach(found => projects.push({ projectFolder: found.projectFolder }));
-    
-    currentFolders =  (await Promise.all(currentFolders.map((f) => getFolders(f)))).flat();
-    current += 1;
-  } while(current < 3);
+const findProjects = (p: string) => {
+  let currentFolders = getFolders(p).filter(f => !exclusions.includes(f));
+  let projects: Project[] = [];
+  while (currentFolders.length > 0) {
+    const c = currentFolders.pop() as string;
+    if (!fs.existsSync(path.join(c, 'package.json'))) {
+      getFolders(c)
+        .filter(f => !exclusions.includes(f))
+        .forEach(f => currentFolders.push(path.join(c, f)));
+    } else {
+      projects.push({ projectFolder: path.join(p, c) });
+    }
+  }
   return projects;
 }
+
+const configPredicate = ow.object.exactShape({
+  packages: ow.array.nonEmpty.ofType(ow.object.exactShape({ 
+    folder: ow.string.nonEmpty,
+    parent: ow.object.nonEmpty, 
+  })),
+});
 
 
 const main = async () => {
   const argv = parseArgs(process.argv.slice(2));
-  
   let projects : Project[] = [];
   if (argv.rush === true) {
-    projects = await getProjects();
-  } else {}
+    projects = await rush.getProjects();
+  } else {
+    projects = findProjects(process.cwd());
+  }
+
+  if (!argv.c && !argv.config) {
+    throw new Error('Expected a -c or --config <config.json> parameter to invoke package-parent!');
+  }
+  const config = util.loadJSONfile(path.resolve(process.cwd(), argv.c || argv.config));
+  ow(config, configPredicate);
+  console.info("projects", projects);
 
   await Promise.all(
-    Object.entries(config).map(async ([key, config]) => {
-      console.info(`processing config=[${key}]`);
+    config.packages.map(async (c) => {
+      console.info(`processing config=[${c.folder}]`);
       await Promise.all(
         projects
-          .filter((p) => p.projectFolder.startsWith(config.folder))
+          .filter((p) => p.projectFolder.endsWith(c.folder))
           .map((project) => {
-            const packageJson = json5.parse(
-              fs.readFileSync(path.join(project.projectFolder, 'package.json'), { encoding: "utf-8" })
-            );
-            const mergedConfig = merge(packageJson, config.parent);
-            fs.writeFileSync(
-              path.join(project.projectFolder, 'package.json'),
-              json5.stringify(mergedConfig, null, 4),
-              { encoding: "utf-8" }
-            );
+            const packageJsonPath = path.join(project.projectFolder, 'package.json');
+            const mergedConfig = merge(util.loadJSONfile(packageJsonPath), c.parent);
+            util.writeJSONfile(packageJsonPath, mergedConfig);
             console.debug(
               `Writing package.json of package ${project.projectFolder}`
             );

@@ -3,60 +3,16 @@ import * as path from "path";
 import * as json5 from "json5";
 import parseArgs from 'minimist';
 import { merge } from "lodash";
+import { getProjects } from './rush'
 
-const findFile = (file: string) => {
-  let p = path.resolve(__dirname);
-  let foundRushConfig = false;
-  do {
-    const [exists] = fs.readdirSync(p).filter((f) => f === file);
-    if (p === path.sep) {
-      throw new Error(`Could not find file ${file}`);
-    }
-    if (!exists) {
-      console.debug("Could not find path, resolving ..", p);
-      p = path.resolve(p, "..");
-    } else {
-      foundRushConfig = true;
-    }
-  } while (!foundRushConfig);
-  if (!foundRushConfig) {
-    throw new Error(`Could not find ${file} file`);
-  }
-  return p;
-};
-
-type RushConfig = {
-  projects: {
-    projectFolder: string;
-  }[];
-};
 
 type Project = {
   projectFolder: string
-  packageJson: string
 }
-
-const getRushProjects = async () => {
-  const rushPath = findFile("rush.json");
-  const rushJson: RushConfig = json5.parse(
-    fs.readFileSync(path.join(rushPath, "rush.json"), { encoding: "utf-8" })
-  );
-  const rushProjects = await Promise.all(
-    rushJson.projects.map(({ projectFolder }) => {
-      const p = path.join(rushPath, projectFolder, "package.json");
-      if (!fs.existsSync(p)) {
-        throw new Error("Could not find package.json on path: " + p);
-      }
-      return { projectFolder, packageJson: p };
-    })
-  );
-  console.debug(`Found ${rushProjects.length} rush projects configured`);
-  return rushProjects;
-};
 
 const config = {
   packages: {
-    match: /\@app\/.*$/,
+    folder: '@app/',
     parent: {
       private: true,
       author: "Michael Lippens",
@@ -68,27 +24,55 @@ const config = {
   },
 };
 
+const getFolders = (p: string) => {
+  return fs
+  .readdirSync(p, { withFileTypes: true })
+  .filter(f => f.isDirectory())
+  .map(f => f.name);
+}
+
+const findProjects = async (p: string) => {
+
+  let currentFolders = getFolders(p);
+  let current = 0;
+  let projects = [];
+  do {
+    
+    const foundPackages = currentFolders
+      .map((f) => {
+        return { projectFolder: f, exists: fs.existsSync(path.join(f, 'package.json')) }
+      })
+      .filter((e) => e.exists)
+      .forEach(found => projects.push({ projectFolder: found.projectFolder }));
+    
+    currentFolders =  (await Promise.all(currentFolders.map((f) => getFolders(f)))).flat();
+    current += 1;
+  } while(current < 3);
+  return projects;
+}
+
+
 const main = async () => {
   const argv = parseArgs(process.argv.slice(2));
   
   let projects : Project[] = [];
   if (argv.rush === true) {
-    projects = await getRushProjects();
-  }
+    projects = await getProjects();
+  } else {}
 
   await Promise.all(
     Object.entries(config).map(async ([key, config]) => {
       console.info(`processing config=[${key}]`);
       await Promise.all(
         projects
-          .filter((p) => config.match.test(p.projectFolder))
+          .filter((p) => p.projectFolder.startsWith(config.folder))
           .map((project) => {
             const packageJson = json5.parse(
-              fs.readFileSync(project.packageJson, { encoding: "utf-8" })
+              fs.readFileSync(path.join(project.projectFolder, 'package.json'), { encoding: "utf-8" })
             );
             const mergedConfig = merge(packageJson, config.parent);
             fs.writeFileSync(
-              project.packageJson,
+              path.join(project.projectFolder, 'package.json'),
               json5.stringify(mergedConfig, null, 4),
               { encoding: "utf-8" }
             );

@@ -11,6 +11,8 @@ type Project = {
   projectFolder: string
 }
 
+const defaultConfigFile = '.package-parent.json';
+
 const getFolders = (p: string) => {
   return fs
     .readdirSync(p, { withFileTypes: true })
@@ -43,7 +45,6 @@ const configPredicate = ow.object.exactShape({
   })),
 });
 
-
 const main = async () => {
   const argv = parseArgs(process.argv.slice(2));
   let projects : Project[] = [];
@@ -53,12 +54,12 @@ const main = async () => {
     projects = findProjects(process.cwd());
   }
 
-  if (!argv.c && !argv.config) {
-    throw new Error('Expected a -c or --config <config.json> parameter to invoke package-parent!');
+  const configFilePath = path.resolve(process.cwd(), (argv.c || argv.config) || defaultConfigFile);
+  if (!fs.existsSync(configFilePath)) {
+    throw new Error('Expecting a -c or --config <config.json> parameter to invoke package-parent, or provide a .package-parent.json file!');
   }
-  const config = util.loadJSONfile(path.resolve(process.cwd(), argv.c || argv.config));
+  const config = util.loadJSONfile(configFilePath);
   ow(config, configPredicate);
-  console.info("projects", projects);
 
   await Promise.all(
     config.packages.map(async (c) => {

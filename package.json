@@ -1,5 +1,5 @@
 {
-  "name": "package-parent",
+  "name": "@mlippens/package-parent",
   "version": "0.1.0",
   "description": "A multi-package configurator for node package.json files",
   "main": "build/index.js",
@@ -30,5 +30,8 @@
     "build": "node esbuild.config.js"
   },
   "author": "Michael Lippens <lippens.m@gmail.com>",
-  "license": "MIT"
+  "license": "MIT",
+  "volta": {
+    "node": "14.18.3"
+  }
 }

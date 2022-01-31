@@ -1,0 +1,15 @@
+name: nodejs build
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v2
+      - name: Use node lts
+        uses: actions/setup-node@v1
+        with: 
+          node-version: 14.x
+      - run: npm ci
+      - run: npm test
+      - run: npm run build

@@ -2,4 +2,4 @@
 
 exports[`#util #loadJSONfile should throw an error when attempting to load a non JSON file 1`] = `"JSON5: invalid character 'h' at 1:2"`;
 
-exports[`#util #loadJSONfile should throw an error when attempting to load a nonexisting file 1`] = `"Could not find file /home/michael/workspace/rush-test/test/resources/doesnotexist.json"`;
+exports[`#util #loadJSONfile should throw an error when attempting to load a nonexisting file 1`] = `"Could not find file /home/michael/workspace/package-parent/test/resources/doesnotexist.json"`;
